@@ -1,6 +1,8 @@
 const keys = require('./keys');
 
-/* express setup */
+/****************
+ * express setup
+ ****************/
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -9,7 +11,9 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-/* pg setup */
+/***************
+ * pg setup
+ ***************/
 const { Pool } = require('pg');
 const pgClient = new Pool({
   user: keys.pgUser,
@@ -19,13 +23,15 @@ const pgClient = new Pool({
   port: keys.pgPort,
 });
 
-pgClient.on('error', () => console.error('Lost PG connection'));
+pgClient.on('connect', () => {
+  pgClient
+    .query('CREATE TABLE IF NOT EXISTS values (number INT)')
+    .catch(err => console.error('ERROR', err));
+});
 
-pgClient
-  .query('CREATE TABLE IF NOT EXISTS values (number INT)')
-  .catch(err => console.error('query error: ', err));
-
-/*redis connection */
+/***************
+ * redis connection
+ ***************/
 const redis = require('redis');
 const redisClient = redis.createClient({
   host: keys.redisHost,
@@ -41,12 +47,17 @@ app.get('/', (req, res) => {
 });
 
 app.get('/values/all', async (req, res) => {
-  const values = await pgClient.query('SELECT * from values');
-  res.send(values.rows);
+  try {
+    const values = await pgClient.query('SELECT * from values');
+    res.send(values.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(400).send('pg error');
+  }
 });
 
 app.get('/values/current', async (req, res) => {
-  redisClient('values', (err, values) => {
+  redisClient.hgetall('values', (err, values) => {
     res.send(values);
   });
 });
@@ -58,7 +69,7 @@ app.post('/values', async (req, res) => {
   }
 
   redisClient.hset('values', index, 'calulating...');
-  redisPublisher('insert', index);
+  redisPublisher.publish('insert', index);
   pgClient.query('INSERT INTO values(number) VALUES($1)', [index]);
   res.send({ working: true });
 });
