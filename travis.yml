@@ -1,0 +1,23 @@
+language: generic
+services:
+  - docker
+  # use the docker dev file to run tests.
+  # prod build has no tests in it
+before_install:
+  - docker build -t bsl333/docker-react:test -f ./client/Dockerfile.dev ./client
+
+script:
+  - docker run -e CI=true bsl333/docker-react:test npm run test -- --coverage
+
+after_success:
+  - docker build -t bsl333/fib-client ./client
+  - docker build -t bsl333/fib-nginx ./nginx
+  - docker build -t bsl333/fib-server ./server
+  - docker build -t bsl333/fib-worker ./worker
+  # Log in to docker
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_ID" --password-stdin
+  # Take those images and push to docker hub
+  - docker push bsl333/fib-client
+  - docker push bsl333/fib-nginx
+  - docker push bsl333/fib-server
+  - docker push bsl333/fib-worker
